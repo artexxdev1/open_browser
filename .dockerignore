@@ -1,0 +1,16 @@
+.git
+.gitignore
+.env
+.venv
+venv
+__pycache__
+*.py[cod]
+*.egg-info
+.pytest_cache
+.mypy_cache
+.ruff_cache
+storage/state.json
+storage/logs/*.log
+docker-compose.yml
+docker-stack.yml
+README.md

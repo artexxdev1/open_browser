@@ -1,0 +1,30 @@
+services:
+  automation:
+    image: playwright-automation:latest
+    env_file:
+      - .env
+    environment:
+      HEADLESS: "true"
+    volumes:
+      - automation-storage:/app/storage
+    deploy:
+      replicas: 3
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+        order: start-first
+      rollback_config:
+        parallelism: 1
+        delay: 5s
+    stop_grace_period: 30s
+    init: true
+
+volumes:
+  automation-storage:
+    driver: local
