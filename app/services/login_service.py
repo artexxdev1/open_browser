@@ -36,7 +36,7 @@ class LoginService:
         page = await context.new_page()
         try:
             if self._settings.uses_token_auth:
-                await self._retry(self._perform_cookie_login)(context, page)
+                await self._perform_cookie_login(context, page)
             else:
                 await self._retry(self._perform_password_login)(page)
             logger.info("Login completed successfully")
@@ -72,48 +72,60 @@ class LoginService:
         await self._verify_login(page)
 
     async def _perform_cookie_login(self, context: BrowserContext, page: Page) -> None:
-        """Set accessToken cookie, open chat, and verify the input is ready."""
+        """Set accessToken cookie and open chat until the input is ready."""
         target_url = self._settings.login_url or self._settings.base_url
         cookie_name = self._settings.token_cookie_name
-        domain = self._settings.cookie_domain
+        domain = self._settings.cookie_domain.lstrip(".")
+        token = self._settings.access_token
 
         await context.clear_cookies()
         await context.add_cookies(
             [
                 {
                     "name": cookie_name,
-                    "value": self._settings.access_token,
+                    "value": token,
                     "domain": domain,
                     "path": "/",
                     "secure": True,
                     "httpOnly": False,
                     "sameSite": "Lax",
-                }
+                },
+                {
+                    "name": cookie_name,
+                    "value": token,
+                    "domain": f".{domain}",
+                    "path": "/",
+                    "secure": True,
+                    "httpOnly": False,
+                    "sameSite": "Lax",
+                },
             ]
         )
-        logger.info("Cookie set: %s (domain=%s)", cookie_name, domain)
+        logger.info("Cookie set: %s (domain=%s / .%s)", cookie_name, domain, domain)
 
-        await self._navigation.open_page(page, target_url)
+        await page.goto(target_url, wait_until="domcontentloaded", timeout=self._settings.navigation_timeout)
 
-        # Some GapGPT builds also read localStorage; keep both in sync.
+        # Keep localStorage in sync without forcing a reload (reload can race the SPA).
         await page.evaluate(
-            """([key, token]) => {
-                try { localStorage.setItem(key, token); } catch (e) {}
+            """([key, value]) => {
+                try { localStorage.setItem(key, value); } catch (e) {}
             }""",
-            [self._settings.token_storage_key, self._settings.access_token],
+            [self._settings.token_storage_key, token],
         )
-        await page.reload(wait_until="domcontentloaded")
+
+        # GapGPT SPA needs a moment to hydrate the chat composer.
+        await page.wait_for_timeout(3000)
         await self._verify_login(page)
 
     async def _verify_login(self, page: Page) -> None:
         """Confirm login succeeded using the configured success selector."""
         try:
-            await self._navigation.wait_for_selector(
-                page,
+            await page.wait_for_selector(
                 self._settings.login_success_selector,
                 state="visible",
+                timeout=self._settings.navigation_timeout,
             )
-        except TimeoutError as exc:
+        except PlaywrightTimeoutError as exc:
             raise LoginError(
                 "Login verification failed",
                 context={

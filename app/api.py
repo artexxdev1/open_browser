@@ -43,11 +43,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-        try:
-            await engine.start()
-        except Exception:
-            logger.exception("Failed to warm GapGPT session on startup")
+        # Start API immediately; warm browser in background so /health stays up.
+        async def _warm() -> None:
+            try:
+                await engine.start()
+            except Exception:
+                logger.exception("Failed to warm GapGPT session on startup")
+
+        import asyncio
+
+        warm_task = asyncio.create_task(_warm())
         yield
+        warm_task.cancel()
         await engine.stop()
 
     app = FastAPI(
