@@ -30,20 +30,13 @@ class LoginService:
         self._retry = with_retries(settings)
 
     async def login(self, context: BrowserContext) -> None:
-        """Perform login and persist authentication in the browser context.
-
-        Args:
-            context: Browser context used for authentication.
-
-        Raises:
-            LoginError: When credentials are missing or login verification fails.
-        """
+        """Perform login and persist authentication in the browser context."""
         self._validate_credentials()
 
         page = await context.new_page()
         try:
             if self._settings.uses_token_auth:
-                await self._retry(self._perform_token_login)(page)
+                await self._retry(self._perform_cookie_login)(context, page)
             else:
                 await self._retry(self._perform_password_login)(page)
             logger.info("Login completed successfully")
@@ -78,19 +71,37 @@ class LoginService:
         await self._form.click(page, self._settings.login_submit_selector)
         await self._verify_login(page)
 
-    async def _perform_token_login(self, page: Page) -> None:
-        """Inject an access token into localStorage and reload the app."""
+    async def _perform_cookie_login(self, context: BrowserContext, page: Page) -> None:
+        """Set accessToken cookie, open chat, and verify the input is ready."""
         target_url = self._settings.login_url or self._settings.base_url
+        cookie_name = self._settings.token_cookie_name
+        domain = self._settings.cookie_domain
+
+        await context.clear_cookies()
+        await context.add_cookies(
+            [
+                {
+                    "name": cookie_name,
+                    "value": self._settings.access_token,
+                    "domain": domain,
+                    "path": "/",
+                    "secure": True,
+                    "httpOnly": False,
+                    "sameSite": "Lax",
+                }
+            ]
+        )
+        logger.info("Cookie set: %s (domain=%s)", cookie_name, domain)
+
         await self._navigation.open_page(page, target_url)
 
+        # Some GapGPT builds also read localStorage; keep both in sync.
         await page.evaluate(
             """([key, token]) => {
-                localStorage.setItem(key, token);
+                try { localStorage.setItem(key, token); } catch (e) {}
             }""",
             [self._settings.token_storage_key, self._settings.access_token],
         )
-        logger.info("Access token injected into localStorage key: %s", self._settings.token_storage_key)
-
         await page.reload(wait_until="domcontentloaded")
         await self._verify_login(page)
 
@@ -115,7 +126,7 @@ class LoginService:
         """Ensure required credentials are configured."""
         if self._settings.uses_token_auth:
             if not self._settings.access_token:
-                raise LoginError("ACCESS_TOKEN must be set when AUTH_MODE=token")
+                raise LoginError("ACCESS_TOKEN must be set when AUTH_MODE=cookie/token")
             return
 
         if not self._settings.username or not self._settings.password:

@@ -6,6 +6,7 @@ import os
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
@@ -52,7 +53,9 @@ class Settings:
     username: str
     password: str
     access_token: str
+    token_cookie_name: str
     token_storage_key: str
+    cookie_domain: str
     timeout: int
     navigation_timeout: int
     login_username_selector: str
@@ -65,6 +68,9 @@ class Settings:
     chat_answer_selector: str
     answer_timeout: int
     test_message: str
+    host: str
+    port: int
+    api_key: str
     storage_state_path: Path
     log_dir: Path
     log_level: str
@@ -74,8 +80,8 @@ class Settings:
 
     @property
     def uses_token_auth(self) -> bool:
-        """Return True when authentication uses an access token."""
-        return self.auth_mode.lower() == "token"
+        """Return True when authentication uses an access token cookie."""
+        return self.auth_mode.lower() in {"token", "cookie"}
 
     @property
     def browser_args(self) -> list[str]:
@@ -97,33 +103,45 @@ class Settings:
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """Return cached application settings."""
+    base_url = os.getenv("BASE_URL", "https://gapgpt.app/chat").strip()
+    parsed = urlparse(base_url)
+    default_cookie_domain = parsed.hostname or "gapgpt.app"
+
     return Settings(
         headless=_env_bool("HEADLESS", default=True),
-        base_url=os.getenv("BASE_URL", "").strip(),
-        login_url=os.getenv("LOGIN_URL", "").strip(),
-        auth_mode=os.getenv("AUTH_MODE", "password").strip().lower(),
+        base_url=base_url,
+        login_url=os.getenv("LOGIN_URL", base_url).strip(),
+        auth_mode=os.getenv("AUTH_MODE", "cookie").strip().lower(),
         username=os.getenv("USERNAME", "").strip(),
         password=os.getenv("PASSWORD", "").strip(),
         access_token=os.getenv("ACCESS_TOKEN", "").strip(),
-        token_storage_key=os.getenv("TOKEN_STORAGE_KEY", "accessToken"),
+        token_cookie_name=os.getenv("TOKEN_COOKIE_NAME", "accessToken").strip(),
+        token_storage_key=os.getenv("TOKEN_STORAGE_KEY", "accessToken").strip(),
+        cookie_domain=os.getenv("COOKIE_DOMAIN", default_cookie_domain).strip(),
         timeout=_env_int("TIMEOUT", 30_000),
         navigation_timeout=_env_int("NAVIGATION_TIMEOUT", 60_000),
         login_username_selector=os.getenv("LOGIN_USERNAME_SELECTOR", "#username"),
         login_password_selector=os.getenv("LOGIN_PASSWORD_SELECTOR", "#password"),
         login_submit_selector=os.getenv("LOGIN_SUBMIT_SELECTOR", 'button[type="submit"]'),
-        login_success_selector=os.getenv("LOGIN_SUCCESS_SELECTOR", ".dashboard"),
-        session_expired_selector=os.getenv("SESSION_EXPIRED_SELECTOR", 'a[href="/login"]'),
+        login_success_selector=os.getenv(
+            "LOGIN_SUCCESS_SELECTOR",
+            "textarea.q-field__native.bidi-textarea",
+        ),
+        session_expired_selector=os.getenv("SESSION_EXPIRED_SELECTOR", ""),
         chat_input_selector=os.getenv(
             "CHAT_INPUT_SELECTOR",
             "textarea.q-field__native.bidi-textarea",
         ),
-        chat_submit_selector=os.getenv("CHAT_SUBMIT_SELECTOR", "button.submit-btn-v2"),
-        chat_answer_selector=os.getenv(
-            "CHAT_ANSWER_SELECTOR",
-            ".q-message-text--received .q-message-text-content",
+        chat_submit_selector=os.getenv(
+            "CHAT_SUBMIT_SELECTOR",
+            'button:has(.material-icons:has-text("arrow_upward"))',
         ),
-        answer_timeout=_env_int("ANSWER_TIMEOUT", 120_000),
-        test_message=os.getenv("TEST_MESSAGE", "Hello, this is a test message."),
+        chat_answer_selector=os.getenv("CHAT_ANSWER_SELECTOR", ".markdown-container"),
+        answer_timeout=_env_int("ANSWER_TIMEOUT", 180_000),
+        test_message=os.getenv("TEST_MESSAGE", "سلام"),
+        host=os.getenv("HOST", "0.0.0.0").strip(),
+        port=_env_int("PORT", 8000),
+        api_key=os.getenv("API_KEY", "").strip(),
         storage_state_path=_env_path("STORAGE_STATE_PATH", PROJECT_ROOT / "storage" / "state.json"),
         log_dir=_env_path("LOG_DIR", PROJECT_ROOT / "storage" / "logs"),
         log_level=os.getenv("LOG_LEVEL", "INFO").upper(),

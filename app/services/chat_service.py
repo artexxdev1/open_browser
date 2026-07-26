@@ -38,7 +38,7 @@ class ChatService:
         logger.info("Chat page ready")
 
     async def send_message(self, page: Page, message: str | None = None) -> str:
-        """Type a message, submit it, wait for the reply, and return the text."""
+        """Paste a message, click send, wait for the reply, and return text."""
         text = message or self._settings.test_message
         input_selector = self._settings.chat_input_selector
         submit_selector = self._settings.chat_submit_selector
@@ -51,11 +51,10 @@ class ChatService:
         await self._form.click(page, submit_selector)
         logger.info("Message submitted (%d chars)", len(text))
 
-        answer = await self.wait_for_answer(page, previous_count=before_count)
-        return answer
+        return await self.wait_for_answer(page, previous_count=before_count)
 
     async def wait_for_answer(self, page: Page, *, previous_count: int = 0) -> str:
-        """Wait until a new answer appears in the answer container and return it."""
+        """Wait until a new markdown answer finishes streaming and return it."""
         answer_selector = self._settings.chat_answer_selector
         timeout = self._settings.answer_timeout
         answers = page.locator(answer_selector)
@@ -79,23 +78,21 @@ class ChatService:
                 },
             ) from exc
 
-        # Prefer the newest answer bubble once streaming settles.
         latest = answers.last
         await latest.wait_for(state="visible", timeout=timeout)
 
-        # Wait briefly for streaming text to stabilize (same text twice in a row).
         previous_text = ""
         stable_reads = 0
-        for _ in range(60):
+        for _ in range(120):
             current_text = (await latest.inner_text()).strip()
             if current_text and current_text == previous_text:
                 stable_reads += 1
-                if stable_reads >= 2:
+                if stable_reads >= 3:
                     break
             else:
                 stable_reads = 0
                 previous_text = current_text
-            await page.wait_for_timeout(500)
+            await page.wait_for_timeout(750)
 
         answer_text = (await latest.inner_text()).strip()
         logger.info("Answer received (%d chars)", len(answer_text))

@@ -1,19 +1,38 @@
 services:
-  automation:
+  gapgpt-api:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: playwright-automation
+    image: gapgpt-api:latest
+    container_name: gapGPT_api
     env_file:
       - .env
     environment:
       HEADLESS: "true"
+      HOST: "0.0.0.0"
+      PORT: "8000"
     volumes:
-      - ./app:/app/app:ro
       - automation-storage:/app/storage
     restart: unless-stopped
     init: true
-    stop_grace_period: 30s
+    stop_grace_period: 60s
+    networks:
+      - traefik-public
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-public
+      - traefik.http.routers.gapGPT_api.rule=Host(`gapgpt-api.artan8n.ir`)
+      - traefik.http.routers.gapGPT_api.entrypoints=websecure
+      - traefik.http.routers.gapGPT_api.tls=true
+      - traefik.http.routers.gapGPT_api.tls.certresolver=le
+      - traefik.http.services.gapGPT_api.loadbalancer.server.port=8000
+      - traefik.http.routers.gapGPT_api-http.rule=Host(`gapgpt-api.artan8n.ir`)
+      - traefik.http.routers.gapGPT_api-http.entrypoints=web
+      - traefik.http.routers.gapGPT_api-http.middlewares=https-redirect@docker
+
+networks:
+  traefik-public:
+    external: true
 
 volumes:
   automation-storage:

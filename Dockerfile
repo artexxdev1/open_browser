@@ -28,4 +28,6 @@ RUN mkdir -p storage/logs \
 
 USER automation
 
+EXPOSE 8000
+
 CMD ["python", "-m", "app.main"]
