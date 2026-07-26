@@ -21,12 +21,12 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=traefik-public
-      - traefik.http.routers.gapGPT_api.rule=Host(`gapgpt-api.artan8n.ir`)
+      - traefik.http.routers.gapGPT_api.rule=Host(`gapgpt-api.artan8n.ir`) || Host(`gapGPT_api.artan8n.ir`)
       - traefik.http.routers.gapGPT_api.entrypoints=websecure
       - traefik.http.routers.gapGPT_api.tls=true
       - traefik.http.routers.gapGPT_api.tls.certresolver=le
       - traefik.http.services.gapGPT_api.loadbalancer.server.port=8000
-      - traefik.http.routers.gapGPT_api-http.rule=Host(`gapgpt-api.artan8n.ir`)
+      - traefik.http.routers.gapGPT_api-http.rule=Host(`gapgpt-api.artan8n.ir`) || Host(`gapGPT_api.artan8n.ir`)
       - traefik.http.routers.gapGPT_api-http.entrypoints=web
       - traefik.http.routers.gapGPT_api-http.middlewares=https-redirect@docker
 

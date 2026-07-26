@@ -4,10 +4,13 @@
   "compose_file": "/opt/cicd/apps/gapGPT_api/docker-compose.yml",
   "compose_workdir": "/opt/cicd/apps/gapGPT_api",
   "containers": ["gapGPT_api"],
-  "domains": ["gapgpt-api.artan8n.ir"],
+  "domains": ["gapgpt-api.artan8n.ir", "gapGPT_api.artan8n.ir"],
   "service_port": 8000,
   "health_path": "/health",
   "traefik_output": "fixito-gapGPT_api.yml",
   "traefik_generate": true,
-  "health_urls": ["https://gapgpt-api.artan8n.ir/health"]
+  "health_urls": [
+    "https://gapgpt-api.artan8n.ir/health",
+    "https://gapGPT_api.artan8n.ir/health"
+  ]
 }
