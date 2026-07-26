@@ -1,4 +1,4 @@
-"""Chromium browser lifecycle management."""
+"""Browser lifecycle management."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 class BrowserManager:
-    """Launch and manage Chromium browser instances for automation."""
+    """Launch and manage Playwright browser instances for automation."""
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
@@ -34,26 +34,23 @@ class BrowserManager:
         return self._browser is not None and self._browser.is_connected()
 
     async def start(self, storage_state: str | None = None) -> BrowserContext:
-        """Launch Chromium and create a browser context.
-
-        Args:
-            storage_state: Optional path to persisted storage state JSON.
-
-        Returns:
-            Initialized browser context.
-        """
+        """Launch browser and create a browser context."""
         if self.is_running:
             return self.context
 
-        logger.info("Starting Chromium (headless=%s)", self._settings.headless)
+        browser_name = self._settings.browser_name
+        logger.info("Starting %s (headless=%s)", browser_name, self._settings.headless)
         self._playwright = await async_playwright().start()
-        self._browser = await self._playwright.chromium.launch(
-            headless=self._settings.headless,
-            args=self._settings.browser_args,
-        )
+        launcher = getattr(self._playwright, browser_name)
+
+        launch_kwargs: dict[str, Any] = {"headless": self._settings.headless}
+        if browser_name == "chromium":
+            launch_kwargs["args"] = self._settings.browser_args
+
+        self._browser = await launcher.launch(**launch_kwargs)
 
         context_options: dict[str, Any] = {
-            "viewport": {"width": 1280, "height": 720},
+            "viewport": {"width": 1024, "height": 720},
             "ignore_https_errors": True,
         }
         if storage_state:

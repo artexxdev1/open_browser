@@ -47,6 +47,8 @@ class Settings:
     """Immutable application configuration."""
 
     headless: bool
+    browser_name: str
+    warm_on_start: bool
     base_url: str
     login_url: str
     auth_mode: str
@@ -109,6 +111,8 @@ def get_settings() -> Settings:
 
     return Settings(
         headless=_env_bool("HEADLESS", default=True),
+        browser_name=os.getenv("BROWSER_NAME", "firefox").strip().lower(),
+        warm_on_start=_env_bool("WARM_ON_START", default=False),
         base_url=base_url,
         login_url=os.getenv("LOGIN_URL", base_url).strip(),
         auth_mode=os.getenv("AUTH_MODE", "cookie").strip().lower(),

@@ -5,8 +5,6 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from playwright.async_api import Error as PlaywrightError
-
 from app.browser.manager import BrowserManager
 from app.config.settings import Settings
 from app.managers.session_manager import SessionManager
@@ -19,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class GapGPTAutomation:
-    """Authenticate once, then handle each ask on a fresh page."""
+    """Launch browser per request to avoid OOM on small VPS hosts."""
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
@@ -38,30 +36,22 @@ class GapGPTAutomation:
             self._form_service,
         )
         self._lock = asyncio.Lock()
-        self._ready = False
 
     @property
     def ready(self) -> bool:
-        """Return True when the browser context is authenticated."""
-        return self._ready and self._browser_manager.is_running
+        """API is ready even when browser is cold (launched on demand)."""
+        return True
 
     async def start(self) -> None:
-        """Launch browser and authenticate with the accessToken cookie."""
-        if self.ready:
+        """Optional warm path — disabled by default on low-memory servers."""
+        if not self._settings.warm_on_start:
+            logger.info("Warm-on-start disabled; browser will launch per request")
             return
-
-        if self._browser_manager.is_running:
-            await self._browser_manager.stop()
-
-        await self._browser_manager.start(storage_state=None)
-        await self._login_service.login(self._browser_manager.context)
-        await self._session_manager.save(self._browser_manager.context)
-        self._ready = True
-        logger.info("GapGPT automation ready")
+        await self._open_session()
+        await self._browser_manager.stop()
 
     async def stop(self) -> None:
-        """Close browser resources."""
-        self._ready = False
+        """Ensure browser is closed."""
         await self._browser_manager.stop()
 
     async def ask(self, message: str) -> str:
@@ -76,25 +66,14 @@ class GapGPTAutomation:
             for attempt in range(1, 4):
                 page = None
                 try:
-                    if not self.ready:
-                        await self.start()
-
+                    await self._open_session()
                     page = await self._browser_manager.new_page()
                     await self._chat_service.open_chat(page)
-                    return await self._chat_service.send_message(page, text)
+                    answer = await self._chat_service.send_message(page, text)
+                    return answer
                 except Exception as exc:
                     last_error = exc
                     logger.exception("ask() attempt %s failed", attempt)
-                    self._ready = False
-                    if page is not None:
-                        try:
-                            await page.close()
-                        except Exception:
-                            pass
-                    try:
-                        await self._browser_manager.stop()
-                    except Exception:
-                        logger.debug("browser stop after crash failed", exc_info=True)
                     if attempt < 3:
                         await asyncio.sleep(1.5 * attempt)
                         continue
@@ -105,11 +84,14 @@ class GapGPTAutomation:
                             await page.close()
                         except Exception:
                             pass
+                    await self._browser_manager.stop()
 
         assert last_error is not None
         raise last_error
 
-    @staticmethod
-    def _is_recoverable(exc: Exception) -> bool:
-        message = str(exc).lower()
-        return isinstance(exc, PlaywrightError) or "crash" in message or "target closed" in message
+    async def _open_session(self) -> None:
+        if self._browser_manager.is_running:
+            await self._browser_manager.stop()
+        await self._browser_manager.start(storage_state=None)
+        await self._login_service.login(self._browser_manager.context)
+        await self._session_manager.save(self._browser_manager.context)

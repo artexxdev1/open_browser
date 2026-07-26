@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from playwright.async_api import BrowserContext, Page, TimeoutError as PlaywrightTimeoutError
@@ -33,12 +34,15 @@ class LoginService:
         """Perform login and persist authentication in the browser context."""
         self._validate_credentials()
 
-        page = await context.new_page()
         try:
             if self._settings.uses_token_auth:
-                await self._perform_cookie_login(context, page)
+                await self._perform_cookie_login(context)
             else:
-                await self._retry(self._perform_password_login)(page)
+                page = await context.new_page()
+                try:
+                    await self._retry(self._perform_password_login)(page)
+                finally:
+                    await page.close()
             logger.info("Login completed successfully")
         except (LoginError, ElementNotFoundError, TimeoutError):
             raise
@@ -55,8 +59,6 @@ class LoginService:
                     "error": str(exc),
                 },
             ) from exc
-        finally:
-            await page.close()
 
     async def _perform_password_login(self, page: Page) -> None:
         """Execute the username/password login workflow."""
@@ -71,7 +73,7 @@ class LoginService:
         await self._form.click(page, self._settings.login_submit_selector)
         await self._verify_login(page)
 
-    async def _perform_cookie_login(self, context: BrowserContext, page: Page) -> None:
+    async def _perform_cookie_login(self, context: BrowserContext) -> None:
         """Set accessToken cookie and open chat until the input is ready."""
         target_url = self._settings.login_url or self._settings.base_url
         cookie_name = self._settings.token_cookie_name
@@ -96,6 +98,7 @@ class LoginService:
 
         last_error: Exception | None = None
         for attempt in range(1, 4):
+            page = await context.new_page()
             try:
                 await page.goto(
                     target_url,
@@ -108,16 +111,19 @@ class LoginService:
                     }""",
                     [self._settings.token_storage_key, token],
                 )
-                # GapGPT SPA needs a moment to hydrate the chat composer.
-                await page.wait_for_timeout(4000)
+                await asyncio.sleep(4)
                 await self._verify_login(page)
                 return
             except Exception as exc:
                 last_error = exc
                 logger.warning("Cookie login attempt %s failed: %s", attempt, exc)
-                if attempt < 3:
-                    await page.wait_for_timeout(1500)
-                    continue
+                await asyncio.sleep(1.5)
+            finally:
+                try:
+                    await page.close()
+                except Exception:
+                    pass
+
         raise LoginError(
             "Cookie login failed after retries",
             context={"error": str(last_error)},
