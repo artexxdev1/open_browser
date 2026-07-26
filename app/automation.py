@@ -95,7 +95,7 @@ class GapGPTAutomation:
                         await self._browser_manager.stop()
                     except Exception:
                         logger.debug("browser stop after crash failed", exc_info=True)
-                    if attempt < 3 and self._is_recoverable(exc):
+                    if attempt < 3:
                         await asyncio.sleep(1.5 * attempt)
                         continue
                     raise

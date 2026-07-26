@@ -116,7 +116,11 @@ class NavigationService:
         await self.wait_for_load(page, wait_until=wait_until)
 
         if ready_selector:
-            await self.wait_for_selector(page, ready_selector)
+            await self.wait_for_selector(
+                page,
+                ready_selector,
+                timeout=self._settings.navigation_timeout,
+            )
 
     @staticmethod
     async def _goto(page: Page, url: str, wait_until: WaitUntil) -> None:

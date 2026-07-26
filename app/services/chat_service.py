@@ -35,6 +35,8 @@ class ChatService:
             ready_selector=self._settings.chat_input_selector,
             wait_until="domcontentloaded",
         )
+        # SPA composer can mount slightly after the textarea node appears.
+        await page.wait_for_timeout(1500)
         logger.info("Chat page ready")
 
     async def send_message(self, page: Page, message: str | None = None) -> str:

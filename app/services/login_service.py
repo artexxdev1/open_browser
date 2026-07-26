@@ -94,19 +94,34 @@ class LoginService:
         )
         logger.info("Cookie set: %s (domain=%s)", cookie_name, domain)
 
-        await page.goto(target_url, wait_until="domcontentloaded", timeout=self._settings.navigation_timeout)
-
-        # Keep localStorage in sync without forcing a reload (reload can race the SPA).
-        await page.evaluate(
-            """([key, value]) => {
-                try { localStorage.setItem(key, value); } catch (e) {}
-            }""",
-            [self._settings.token_storage_key, token],
+        last_error: Exception | None = None
+        for attempt in range(1, 4):
+            try:
+                await page.goto(
+                    target_url,
+                    wait_until="domcontentloaded",
+                    timeout=self._settings.navigation_timeout,
+                )
+                await page.evaluate(
+                    """([key, value]) => {
+                        try { localStorage.setItem(key, value); } catch (e) {}
+                    }""",
+                    [self._settings.token_storage_key, token],
+                )
+                # GapGPT SPA needs a moment to hydrate the chat composer.
+                await page.wait_for_timeout(4000)
+                await self._verify_login(page)
+                return
+            except Exception as exc:
+                last_error = exc
+                logger.warning("Cookie login attempt %s failed: %s", attempt, exc)
+                if attempt < 3:
+                    await page.wait_for_timeout(1500)
+                    continue
+        raise LoginError(
+            "Cookie login failed after retries",
+            context={"error": str(last_error)},
         )
-
-        # GapGPT SPA needs a moment to hydrate the chat composer.
-        await page.wait_for_timeout(3000)
-        await self._verify_login(page)
 
     async def _verify_login(self, page: Page) -> None:
         """Confirm login succeeded using the configured success selector."""
