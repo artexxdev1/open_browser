@@ -89,19 +89,10 @@ class LoginService:
                     "secure": True,
                     "httpOnly": False,
                     "sameSite": "Lax",
-                },
-                {
-                    "name": cookie_name,
-                    "value": token,
-                    "domain": f".{domain}",
-                    "path": "/",
-                    "secure": True,
-                    "httpOnly": False,
-                    "sameSite": "Lax",
-                },
+                }
             ]
         )
-        logger.info("Cookie set: %s (domain=%s / .%s)", cookie_name, domain, domain)
+        logger.info("Cookie set: %s (domain=%s)", cookie_name, domain)
 
         await page.goto(target_url, wait_until="domcontentloaded", timeout=self._settings.navigation_timeout)
 
